@@ -1,0 +1,15 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<script src="math.js"></script>
+<script src="bessel.js"></script>
+</head>
+<body>
+<span style="font-weight: bold" id="f"></span> <span id="r"></span>
+<script>
+
+document.getElementById('f').innerHTML='bessik('+x+','+n.toFixed(3)+'): ';
+document.getElementById('r').innerHTML=bessik(x,n,ri,rk,rip,rkp);
+</script>
+</body>
+</html>
