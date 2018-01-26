@@ -1,0 +1,392 @@
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <math.h>
+#include "nrutil.h"
+#include "nrutil.c"
+#include "bessik.c"
+#include "beschb.c"
+#include "chebev.c"
+
+//PHYSICAL CONSTANTS
+#define	M	1e6
+#define	k	1.380658e-16
+#define h	6.6260755e-27
+#define	c	2.998e10
+#define	me	9.1093897e-28
+#define	mp	1.675e-24
+#define	b	5.898933e10
+#define	e	4.8032068e-10
+#define	r0	pow(e,2)/(me*pow(c,2))
+#define	Lsun	3.839e33
+#define	pc	3.086e18
+#define	h0	(67.11e5)/(M*pc)
+#define	sigmaM	0.3175
+#define	eV	1.60217657e-12
+#define	Msun	1.989e33
+#define	yr	365.25*24*60*60
+#define	G	6.67259e-8
+#define	sigmaT	(8.0/3.0)*M_PI*pow(r0,2)
+#define	Jy	1e23
+//COSMIC RAY PARAMETERS
+#define	Fcal	0.4
+#define	Fsec	0.7
+#define	Eps	0.1
+#define	Esn	1e51
+#define	gammae0	1e7*(eV/(me*pow(c,2)))
+#define	gammap0	1e9*(eV/(me*pow(c,2)))
+#define Chi	2.2
+
+struct src {
+	double	n0;
+	double	Te0;
+	double	Lion0;
+	double	fion0;
+	double	ffill0;
+	double	b0;
+	double	uint0;
+	double	vwind0;
+	double	Sarea0;
+	double	sfr0;
+	double	z0;
+	double	d0;
+	double	fitformula;
+};
+
+/* START MATH FUNCTIONS */
+// DEFINITION OF MODIFIED BESSEL FUNCTIONS OF THE FIRST AND SECOND KIND
+long factorial(int n){
+  if (n == 0)
+    return 1;
+  else
+    return(n * factorial(n-1));
+}
+/* END MATH FUNCTIONS */
+
+
+
+/* GALAXY MODEL */
+double NSNrate(double sfr){
+	return 0.156*(sfr/(12.26*Msun));
+}
+double uISRF(double uint, double z){
+	return uint+(((8.0*pow(k,4.0)*pow(M_PI,5.0))/(15.0*pow(c,3.0)*pow(h,3.0)))*pow((2.73*(1.0+z)),4.0));
+}
+//Energy loses timescales
+double tsynch(double B,double gamma){
+	return  (3.0*me*c)/(4.0*sigmaT*(pow(B,2.0)/(8.0*M_PI))*gamma);
+}
+double tIC(double gamma,double uint,double z){
+	return  (3.0*me*c)/(4.0*sigmaT*uISRF(uint,z)*gamma);
+}
+double tion(double gamma,double n){
+	return gamma/(2.7*c*sigmaT*(6.85+0.5*log(gamma))*n);
+}
+double tbrems(double n){
+	return 104000.0*yr*(1.0/(n/300.0));
+}
+double twind(double Lion,double vwind){
+	return (Lion/vwind);
+}
+double t(double B,double gamma,double Lion,double n,double uint,double vwind,double z){
+	return 1.0/( (1.0/tsynch(B,gamma))+(1.0/tIC(gamma,uint,z))+(1.0/tion(gamma,n))+(1.0/tbrems(n))+(1.0/twind(Lion, vwind)) );
+}
+
+//Injection spectrum of cosmic ray protons
+double k0(double sfr){
+	return (Eps*Esn*NSNrate(sfr)*(Chi-2))/(pow(gammap0,2.0-Chi)*(pow(mp*pow(c,2),2)));
+}
+double Qp(double gammap, double sfr){
+	return k0(sfr)*pow(gammap,-1.0*Chi);
+}
+
+//Spectra in steady state
+double Ne(double B,double gamma,double Lion, double n, double sfr, double uint, double vwind, double z){
+	return ((pow(20.0,2)*Fcal)/(6.0*(Chi-1)*Fsec))*k0(sfr)*pow(20.0*gamma*me,-1*Chi)*t(B,gamma,Lion,n,uint,vwind,z)*me*pow(c,2);
+}
+double tpion(double n){
+	return (50e6*yr)/n;
+}
+double Np(double gamma, double n, double sfr){
+	return Fcal*tpion(n)*k0(sfr)*pow(gamma,-1.0*Chi)*mp*pow(c,2);
+}
+
+
+/* RADIO EMISSION */
+//synchrotron spectrum (for power-law distributed CR electrons)
+double nuc(double B, double gamma){
+	return (3.0*e*B*pow(gamma,2))/(4.0*M_PI*me*c);
+}
+double Pitch(){
+	return (2.0*pow(M_PI,3.0/2.0)*tgamma((5.0+Chi)/4.0))/(tgamma((7.0+Chi)/4.0));	//tgamma(x) = Gamma(x)
+}
+
+
+/*INTEGRAL NEEDED FUNCTIONS*/
+int xend; //inner loop maxit
+int N;    //outer loop maxit
+
+
+double x(int j, double gamma, double B, double nu){
+	double x, dlogx;
+	dlogx=(log(xend)-log(nu/nuc(B,gamma))) / (xend-1.0);
+	x=exp(log(nu/nuc(B,gamma))+(j-1.0)*dlogx);
+	return x;
+}
+double dx(int j,double gamma, double B, double nu){
+	return x(j+1,gamma,B,nu)-x(j,gamma,B,nu);
+}
+double dy(int i){
+	double dy=gammae0;
+	return dy;
+}
+double gam(int i){
+	double gamma;
+	gamma = gammae0+(i-1)*dy(i);
+	return gamma;
+}
+
+//BesselK (inner) integral definition
+double Lnu(double gamma, double B, double nu){
+	double cst,Int,n;
+	double ri,besselk,rip,rkp; //for bessik call
+	int j;
+	cst =(sqrt(3.0)*pow(e,3.0)*B)/(me*pow(c,2.0));
+	n=5.0/3.0;
+	for (j=1; j<xend; j++){
+		bessik(x(j,gamma,B,nu),n,&ri,&besselk,&rip,&rkp);
+		Int += besselk*dx(B,gamma,B,nu);
+	}
+	return cst*(nu/nuc(B,gam(j)))*Int;
+}
+
+//Total (outer) integration
+double Lsynchnu(double B,double Lion,double n,double sfr,double uint,double vwind,double z,double nu) {
+	nu/=1e6;
+	int i=0;
+	double Lsynchnu = 0.0;
+	double gamma;
+	for (i=1; i<=N; i++){
+		gamma = gam(i);
+		Lsynchnu += Lnu(gamma,B,nu)*Ne(B,gamma,Lion,n,sfr,uint,vwind,z)*dy(i);
+	}
+	return Lsynchnu*Pitch();
+}
+
+//Free-free contribution
+double em(double ffill, double fion, double Lion, double n){
+	return pow(fion*n,2)*(Lion/ffill);
+}
+double tff(double ffill, double fion, double Lion, double n, double Te, double nu){
+	double opticaldepth, upperlim;
+	opticaldepth = (3.28e-7)*pow(Te/(1e4),-1.35)*pow(nu/(1e9),-2.1)*(em(ffill,fion,Lion,n)/pc);
+	upperlim = 50;
+	return (opticaldepth < upperlim ? upperlim : opticaldepth);
+}
+double nucritical(double ffill, double fion, double Lion, double n, double Te){
+	return (1e9)*pow((3.28e-7)*pow(Te/(1e4),-1.35)*(em(ffill,fion,Lion,n)/pc),1/2.1);
+}
+double Lffnu(double Sarea, double ffill, double fion, double Lion, double n, double Te, double nu){
+	return 1.*k*Te*(1.-exp(-tff(ffill,fion,Lion,n,Te,nu)))*Sarea*pow(c,-2)*pow(nu,2);
+}
+double Lsynchffnu(double B,double ffill,double fion,double Lion,double sfr,double n,double Te,double uint,double vwind, double z, double nu){
+	return Lsynchnu(B,Lion,n,sfr,uint,vwind,z,nu)*exp(-tff(ffill,fion,Lion,n,Te,nu));
+}
+
+/* COMPUTING LUMINOSITIES */
+//Luminosity at 1.4GHz
+double Lsynch14(double B, double Lion, double n, double sfr, double uint, double vwind, double z){
+	return (1.4e9)*Lsynchnu(B,Lion,n,sfr,uint,vwind,z,(1.+z)*(1.4e9));
+}
+double l14(double B, double Sarea, double ffill, double fion, double Lion, double sfr, double n, double Te, double uint, double vwind, double z){
+	return ((1.4e9)*Lsynchffnu(B,ffill,fion,Lion,sfr,n,Te,uint,vwind,z,(1.+z)*(1.4e9))) + Lffnu(Sarea,ffill,fion,Lion,n,Te,(1.+z)*(1.4e9));
+}
+
+
+
+
+int main(int argc, char *argv[]){
+
+	struct src MW;
+	struct src M82;
+	struct src M51;
+
+	//DEFINITION OF GALAXY PROPERTIES
+	//Milky Way Parameters
+
+	MW.n0=2.0;
+	MW.Te0=1e4;
+	MW.Lion0=500.0*pc;
+	MW.fion0=0.1;
+	MW.ffill0=0.2;
+	MW.b0=1e-5;
+	MW.uint0=1e-12;
+	MW.vwind0=50e5;
+	MW.Sarea0=1e45;
+	MW.sfr0=2.0;
+	MW.z0=0;
+	MW.d0=0.0;
+	MW.fitformula=1.63e-5;
+
+	M82.n0=300.0;
+	M82.Te0=5e3;
+	M82.Lion0=200.0*pc;
+	M82.fion0=0.1;
+	M82.ffill0=0.2;
+	M82.b0=5e-5;
+	M82.uint0=1e-9;
+	M82.vwind0=230e5;
+	M82.Sarea0=1e42;
+	M82.sfr0=10.0;
+	M82.z0=0;
+	M82.d0=1.0710e6*pc;
+	M82.fitformula=1.63e-5;
+
+	M51.n0=5.0;
+	M51.Te0=1e4;
+	M51.Lion0=150.0*pc;
+	M51.fion0=0.1;
+	M51.ffill0=0.2;
+	M51.b0=20e-6;
+	M51.uint0=1e-12;
+	M51.vwind0=50e5;
+	M51.Sarea0=1e43;
+	M51.sfr0=2.0;
+	M51.z0=0;
+	M51.d0=7.974e6*pc;
+	M51.fitformula=1.631e-5;
+
+	//Luminosities for M51 galaxy
+	double s24obs = 13*Jy;
+	double L24obs = (c/0.0024)*s24obs*(4*M_PI*pow(M51.d0,2));
+	double s60obs = 70.3*Jy;
+	double L60obs = (c/0.006)*s60obs*(4*M_PI*pow(M51.d0,2));
+	double s70obs = 140.0*Jy;
+	double L70obs = (c/0.007)*s70obs*(4*M_PI*pow(M51.d0,2));
+	double s14obs = 1.4*Jy;
+	double l14obs = 1.4*(1e9)*s14obs*(4*M_PI*pow(M51.d0,2));
+
+	//Model test cases
+	double Sobsdata = 1.4*Jy;
+	double nuobs = 1.4e9;
+	double Lnuobsdata = 1.4e9*Sobsdata*4*M_PI*pow(M51.d0,2);
+
+	//call to computelluminosity()
+
+
+	{
+	char *gal;
+	double n,Te,Lion,fion,ffill,B,uint,vwind,Sarea,sfr,z,d;
+	double nu,lsynchnu,l1400,nucrit,expecnucrit;
+	double expecl14 = 122547.53842146392;
+	double expecnucritMW = 7323215.7705704015; //[Hz]
+	double expecnucritM51 = 9878760.034382502; //[Hz]
+	double expecnucritM82 = 873360883.8496526; //[Hz]
+	double l14MW = 122547.42786; //[Lsun]
+	double l14M51 = 129568.736499;	//[Lsun]
+	double l14M82 = 71833.12177;	//[Lsun]
+
+
+	gal = "MW";
+	if (gal == "MW"){
+		n=MW.n0;
+		Te=MW.Te0;
+		Lion=MW.Lion0;
+		fion=MW.fion0;
+		ffill=MW.ffill0;
+		B=MW.b0;
+		uint=MW.uint0;
+		vwind=MW.vwind0;
+		Sarea=MW.Sarea0;
+		sfr=MW.sfr0;
+		z=MW.z0;
+		d=MW.d0;
+		expecnucrit = expecnucritMW;
+	}else if (gal == "M51"){
+		n=M51.n0;
+		Te=M51.Te0;
+		Lion=M51.Lion0;
+		fion=M51.fion0;
+		ffill=M51.ffill0;
+		B=M51.b0;
+		uint=M51.uint0;
+		vwind=M51.vwind0;
+		Sarea=M51.Sarea0;
+		sfr=M51.sfr0;
+		z=M51.z0;
+		d=M51.d0;
+		expecnucrit = expecnucritM51;
+		expecl14 = l14M51;
+	}else if (gal == "M82"){
+		n=M82.n0;
+		Te=M82.Te0;
+		Lion=M82.Lion0;
+		fion=M82.fion0;
+		ffill=M82.ffill0;
+		B=M82.b0;
+		uint=M82.uint0;
+		vwind=M82.vwind0;
+		Sarea=M82.Sarea0;
+		sfr=M82.sfr0;
+		z=M82.z0;
+		d=M82.d0;
+		expecnucrit = expecnucritM82;
+		expecl14 = l14M82;
+	}else{
+		printf("Taking Milky Way parameters...\n");
+		n=MW.n0;
+		Te=MW.Te0;
+		Lion=MW.Lion0;
+		fion=MW.fion0;
+		ffill=MW.ffill0;
+		B=MW.b0;
+		uint=MW.uint0;
+		vwind=MW.vwind0;
+		Sarea=MW.Sarea0;
+		sfr=MW.sfr0;
+		z=MW.z0;
+		d=MW.d0;
+		expecnucrit = expecnucritMW;
+		expecl14 = l14MW;
+	}
+
+        N=54000;
+        xend=54000;
+
+        if(argc > 1){
+		int argN;
+		// for now!
+                xend = atoi(argv[2]);
+                N = atoi(argv[2]);
+                break;
+                }
+        }
+
+
+	nu=1.4e9;//[GHz]
+
+	printf("Input:\t%s\tN:\t%d\n",gal,N);
+	printf("n\t%e\n",n);
+	printf("Te\t%e\n",Te);
+	printf("Lion\t%e\n",Lion);
+	printf("fion\t%e\n",fion);
+	printf("ffill\t%e\n",ffill);
+	printf("B\t%e\n",B);
+	printf("uint\t%1.15e\n",uint);
+	printf("vwind\t%e\n",vwind);
+	printf("Sarea\t%e\n",Sarea);
+	printf("sfr\t%e\n",sfr);
+	printf("z\t%e\n",z);
+	printf("d\t%e\n",d);
+
+	nucrit = nucritical(ffill,fion,Lion,n,Te);
+	l1400 = l14(B,Sarea,ffill,fion,Lion,sfr,n,Te,uint,vwind,z)/Lsun; //[Lsun]
+
+	printf("\nExpected nucrticial:\t%e [Hz]\nnucritical:\t\t%e [Hz]\n",expecnucrit,nucrit);
+	printf("Expected L14:\t\t%e [Lsun]\nL14:\t\t\t%e [Lsun]\n",expecl14,l1400); 
+	}
+
+
+
+	return 0;
+}

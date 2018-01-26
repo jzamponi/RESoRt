@@ -1,0 +1,23 @@
+#El limite de computo para bessik.c es con 
+#Valores correctos (al menos 3 cifras signitficativas)
+n=5/3
+x=738
+#Valores desviados
+n=5/3
+x=742
+#Valores nulos ( K(x)=0.0...)
+n=5/3
+x=734~infty
+
+
+#El limite de computo para besselk.js es con 
+#Valores correctos (al menos 3 cifras signitficativas)
+n=5/3
+x=739
+#Valores desviados
+n=5/3
+x=741
+#Valores nulos ( K(x)=0.0...)
+n=5/3
+x=732~infty
+
