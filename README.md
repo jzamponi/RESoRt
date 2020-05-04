@@ -7,5 +7,5 @@ The Radio Emission Star formation Rate (RESoRt) is an astrophysical web module u
  
  This is a project on behalf of the Universidad of Conception (Chile) and the Nordic Institute for Theoretical Physics (NORDITA, Sweden).
  
- For a current state of the project and also further information about the theory behind of it, please go to:  http://astro.udec.cl/resort .
+ For a current state of the project and also further information about the theory behind of it, please go to:  http://astro.udec.cl/resort
 
