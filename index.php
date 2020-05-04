@@ -1,7 +1,7 @@
 <?php
 	if (!empty($_SERVER["REMOTE_ADDR"]) && $_SERVER["REMOTE_ADDR"]!="127.0.0.1" && $_SERVER["REMOTE_ADDR"]!="190.163.215.244"){	//avoid log if acces from localhost
 	
-		$filename="visitors.txt";
+		$filename="nope";
 		$file = fopen($filename, "a+");
 
 		date_default_timezone_set('America/Santiago');
