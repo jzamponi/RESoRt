@@ -1,35 +1,3 @@
-<?php
-	if (!empty($_SERVER["REMOTE_ADDR"]) && $_SERVER["REMOTE_ADDR"]!="127.0.0.1" && $_SERVER["REMOTE_ADDR"]!="190.163.215.244"){	//avoid log if acces from localhost
-	
-		$filename="nope";
-		$file = fopen($filename, "a+");
-
-		date_default_timezone_set('America/Santiago');
-		fwrite($file, date("F j, Y, g:i a")." [UTC-3]\n");
-
-		fwrite($file, "VIEWER PROPERTIES\n");
-		if (!empty($_SERVER["REMOTE_ADDR"])) fwrite($file, "IP:\t".$_SERVER["REMOTE_ADDR"]. "\n");
-		if (!empty($_SERVER["HTTP_CLIENT_IP"]) && $_SERVER["HTTP_CLIENT_IP"] != $_SERVER["REMOTE_ADDR"]) {
-			 fwrite($file, "IP2:\t".$_SERVER["HTTP_CLIENT_IP"]. "\n");}
-		if (!empty($_SERVER["HTTP_X_FORWARDED_FOR"])) fwrite($file, "IP Behind Proxy:\t".$_SERVER["HTTP_X_FORWARDED_FOR"]. "\n");
-		if (!empty($_SERVER["REMOTE_PORT"])) fwrite($file, "Port:\t".$_SERVER["REMOTE_PORT"]. "\n");
-		if (!empty($_SERVER["HTTP_USER_AGENT"])) fwrite($file, "UAgent:\t".$_SERVER["HTTP_USER_AGENT"]. "\n");
-		if (!empty($_SERVER["REMOTE_HOST"])) fwrite($file, "Remote Host:\t".$_SERVER["REMOTE_HOST"]. "\n");
-		if (!empty($_SERVER["REMOTE_USER"])) fwrite($file, "Remote User:\t".$_SERVER["REMOTE_USER"]. "\n");
-		if (!empty($_SERVER["REDIRECT_REMOTE_USER"])) fwrite($file, "(Redirect)Remote User:\t".$_SERVER["REDIRECT_REMOTE_USER"]. "\n");
-
-
-		$query = @unserialize (file_get_contents('http://ip-api.com/php/'.$_SERVER["REMOTE_ADDR"]));
-		if ($query && $query['status'] == 'success') {
-		    fwrite($file,"Count:\t".$query['country']."\nCity:\t".$query['city']."\n");
-		}
-
-		fwrite($file, "-------------------------------------------------------\n");
-		fclose($file);
-	}
-?>
-
-
 <!-- BEGIN WEBPAGE CONTENT -->
 <!DOCTYPE html>	
 <html>
